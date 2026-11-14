@@ -31,6 +31,8 @@ import {
   opticalDates,
   type Basemap,
 } from "@/components/change-map"
+import { ColourKey } from "@/components/colour-key"
+import { HoverCard, useHoverReading, type MapView } from "@/components/hover-reading"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   daysBetween,
@@ -44,6 +46,8 @@ import {
   type Region,
   type SarEvent,
 } from "@/lib/api"
+import { changeKey, groundKey } from "@/lib/colour-key"
+import { CLASS_SWATCH, HAZARD, doubleBounce, readsAs, wording } from "@/lib/reading"
 import { cn } from "@/lib/utils"
 
 /* ---------- small pieces ---------- */
@@ -134,25 +138,6 @@ const longDate = (iso: string) =>
 
 /* ---------- wording ---------- */
 
-/** What a backscatter drop / rise most plausibly means, per hazard. Plain words, no claims. */
-const WORDING: Record<string, [string, string]> = {
-  flood: ["standing water or smoothed ground", "wetter soil, flooded vegetation, growing crops or wind on water"],
-  fire: ["burn scars with lost canopy", "exposed rough ground, standing trunks or regrowth"],
-  deforestation: ["cleared land", "new structures"],
-  landslide: ["smoothed, bare ground", "debris"],
-}
-const wording = (hazard?: string): [string, string] =>
-  WORDING[hazard ?? ""] ?? ["standing water or smoother ground", "wetter soil, rougher ground or new structures"]
-
-/** What an HH-above-HV rise (a corner reflection) most plausibly is, per hazard. */
-const DOUBLE_BOUNCE: Record<string, string> = {
-  flood: "flooded vegetation",
-  fire: "standing trunks over bare ground",
-  deforestation: "stems or structures",
-}
-const doubleBounce = (hazard?: string) =>
-  DOUBLE_BOUNCE[hazard ?? ""] ?? "double bounce (stems, walls)"
-
 /** The detailed, measured sentence. */
 function headline(e: SarEvent) {
   const [down, up] = wording(e.hazard)
@@ -173,27 +158,6 @@ function headline(e: SarEvent) {
   return parts.length
     ? `${when}, ${parts.join("; ")}.`
     : `${when}, nothing in the ${n(s.aoi_km2)} km² scene changed by more than ±${e.threshold_db} dB.`
-}
-
-/** Plain-language reading of one probed pixel. */
-function readsAs(p: Probe, event: SarEvent) {
-  const [down, up] = wording(event.hazard)
-  const post = p.post_db ?? 0
-  const water = event.stats.water_line_db ?? -16
-  switch (p.flag) {
-    case "decrease":
-      return `Darker: ${down}${post < water ? ", now at open-water level" : ""}`
-    case "increase":
-      return event.cross_pol
-        ? `Brighter, HH rose more than HV: double bounce, ${doubleBounce(event.hazard)}`
-        : `Brighter: ${up}`
-    case "volume":
-      return "Brighter in HH and HV alike: vegetation growth or a rougher surface"
-    case "rough_water":
-      return "Brighter but still water-dark: wind-roughened water"
-    default:
-      return post < water ? "Water-dark on the after date, no significant change" : "No significant change"
-  }
 }
 
 /* ---------- map furniture ---------- */
@@ -252,6 +216,34 @@ function SwipeHandle({
     >
       <ChevronLeftIcon className="size-4" />
       <ChevronRightIcon className="size-4" />
+    </div>
+  )
+}
+
+/** Which colours the map paints: the ground on both dates, or the change on the after date. */
+function ViewSwitch({ view, onChange }: { view: MapView; onChange: (v: MapView) => void }) {
+  const options: [MapView, string, string][] = [
+    ["ground", "Ground", "Colour both dates by what the ground was: water, bare, fields, bright"],
+    ["change", "Change", "Colour only what changed, on the after date"],
+  ]
+  return (
+    <div role="radiogroup" aria-label="Map colours" className="flex h-9 items-center rounded-md bg-muted/60 p-0.5">
+      {options.map(([v, text, tip]) => (
+        <button
+          key={v}
+          type="button"
+          role="radio"
+          aria-checked={view === v}
+          title={tip}
+          onClick={() => onChange(v)}
+          className={cn(
+            "h-8 rounded-[5px] px-2.5 text-[13px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            view === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          {text}
+        </button>
+      ))}
     </div>
   )
 }
@@ -332,12 +324,6 @@ function ClassTable({ event }: { event: SarEvent }) {
   )
 }
 
-const CLASS_SWATCH: Record<Region["cls"], string> = {
-  decrease: "bg-decrease",
-  increase: "bg-increase",
-  volume: "bg-volume",
-  rough_water: "bg-rough",
-}
 const ZONE_PARTS: [keyof NonNullable<Region["breakdown"]>, string, string][] = [
   ["decrease", "bg-decrease", "darker"],
   ["increase", "bg-increase", "double bounce"],
@@ -599,13 +585,6 @@ function Provenance({ event }: { event: SarEvent }) {
       </p>
     </section>
   )
-}
-
-const HAZARD: Record<string, string> = {
-  flood: "Flood",
-  fire: "Wildfire",
-  deforestation: "Deforestation",
-  landslide: "Landslide",
 }
 
 /** Pick the event: a dropdown with a search field (title or hazard). */
@@ -896,6 +875,11 @@ export default function App() {
     [eventId]
   )
   React.useEffect(() => setProbe(null), [eventId])
+  const [hover, onHover] = useHoverReading(event)
+  const [viewChoice, setView] = React.useState<MapView>("ground")
+  // Events processed before the ground layer existed only have the change view.
+  const hasGround = !!event?.layers.before_ground && !!event?.stats.ground
+  const view: MapView = hasGround ? viewChoice : "change"
 
   const onRegion = React.useCallback(
     (r: Region) => {
@@ -951,6 +935,8 @@ export default function App() {
             onRegion={onRegion}
             fit={fit}
             divider={divider}
+            onHover={onHover}
+            view={view}
           />
         ) : (
           <Skeleton className="absolute inset-0 rounded-none bg-muted" />
@@ -1049,7 +1035,7 @@ export default function App() {
 
         {/* Pixel reading: bottom-right, above the toolbar row, clear of the sidebar. */}
         {probe && event && (
-          <div className={cn(panel, "absolute right-4 bottom-[6.5rem] w-[270px]")}>
+          <div className={cn(panel, "absolute right-4 bottom-[9.5rem] w-[270px] sm:bottom-[8.25rem]")}>
             <div className="flex items-center justify-between border-b px-4 py-2">
               <span className="text-[13px] font-semibold">Pixel reading</span>
               <button
@@ -1100,6 +1086,14 @@ export default function App() {
           </div>
         )}
 
+        {event && (
+          <ColourKey
+            title={view === "ground" ? "Ground · before → after" : "Change · after date"}
+            entries={view === "ground" ? groundKey(event) : changeKey(event)}
+            left={covered + free / 2}
+          />
+        )}
+
         {/* Toolbar */}
         <div
           className={cn(
@@ -1108,14 +1102,22 @@ export default function App() {
           )}
           style={{ left: covered + free / 2 }}
         >
-          <Toggle on={showChange} onChange={setShowChange} label="Change" compact={compact} />
+          {hasGround && (
+            <>
+              <ViewSwitch view={view} onChange={setView} />
+              <span className="mx-0.5 h-5 w-px bg-border" />
+            </>
+          )}
+          {view === "change" && (
+            <Toggle on={showChange} onChange={setShowChange} label="Change" compact={compact} />
+          )}
           {event && event.regions.length > 0 && (
             <Toggle on={showAreas} onChange={setShowAreas} label="Areas" compact={compact} />
           )}
-          {event?.layers.subtle && (
+          {view === "change" && event?.layers.subtle && (
             <Toggle on={subtle} onChange={setSubtle} label="Landscape 500 m" compact={compact} />
           )}
-          {event?.layers.before_rgb && (
+          {view === "change" && event?.layers.before_rgb && (
             <Toggle on={colour} onChange={setColour} label="Colour (HH/HV)" compact={compact} />
           )}
           <label className={cn("hidden h-9 items-center gap-2 px-2.5", !tight && "sm:flex")}>
@@ -1199,6 +1201,7 @@ export default function App() {
           </div>
         )}
       </div>
+      <HoverCard state={hover} event={event} divider={divider} width={width} view={view} />
     </div>
   )
 }

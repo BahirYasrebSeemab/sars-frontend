@@ -14,6 +14,7 @@ import {
   useMapEvents,
 } from "react-leaflet"
 
+import type { HoverPoint, MapView } from "@/components/hover-reading"
 import { API_URL, fileUrl, type Region, type SarEvent } from "@/lib/api"
 
 /** Area outlines as map lines (sharp at every zoom): a light halo under a dark line so they read
@@ -284,6 +285,28 @@ function Probe({
   )
 }
 
+/** Reports the spot under the mouse; nothing while the map is dragged or zoomed. */
+function HoverTracker({ onHover }: { onHover: (point: HoverPoint | null) => void }) {
+  const dragging = React.useRef(false)
+  useMapEvents({
+    mousemove: (e) => {
+      if (dragging.current) return
+      onHover({ lat: e.latlng.lat, lon: e.latlng.lng, x: e.containerPoint.x, y: e.containerPoint.y })
+    },
+    mouseout: () => onHover(null),
+    click: () => onHover(null),
+    zoomstart: () => onHover(null),
+    dragstart: () => {
+      dragging.current = true
+      onHover(null)
+    },
+    dragend: () => {
+      dragging.current = false
+    },
+  })
+  return null
+}
+
 /**
  * Full-bleed map for one event. Left of the divider: before. Right: after, with the change mask
  * on top when enabled, so the viewer always sees what the radar saw underneath.
@@ -303,6 +326,8 @@ export function ChangeMap({
   onRegion,
   fit,
   divider,
+  onHover,
+  view,
 }: {
   event: SarEvent
   showChange: boolean
@@ -322,10 +347,17 @@ export function ChangeMap({
   fit: FitOptions
   /** Divider x in px from the map's left edge (the page computes it, knob and chips use it too). */
   divider: number
+  /** The spot under the mouse, for the hover explanation. */
+  onHover: (point: HoverPoint | null) => void
+  /** "ground": both dates coloured by ground class; "change": radar + change on the after side. */
+  view: MapView
 }) {
   const base: BasemapDef = BASEMAPS[basemap]
-  const before = (colour && event.layers.before_rgb) || event.layers.before
-  const after = (colour && event.layers.after_rgb) || event.layers.after
+  const ground = view === "ground" && !!event.layers.before_ground && !!event.layers.after_ground
+  const before =
+    (ground && event.layers.before_ground) || (colour && event.layers.before_rgb) || event.layers.before
+  const after =
+    (ground && event.layers.after_ground) || (colour && event.layers.after_rgb) || event.layers.after
   const [optPre, optPost] = opticalDates(event, basemap)
   // For a dated basemap the gray canvas stays underneath to fill days without a scene.
   const under: BasemapDef = base.dated ? BASEMAPS.gray : base
@@ -359,10 +391,10 @@ export function ChangeMap({
       <MapBridge onMap={onMap} bounds={event.bounds} fit={fit} />
       <Swipe divider={divider} />
           <ImageOverlay url={fileUrl(after)} bounds={event.bounds} opacity={opacity} />
-          {showChange && (
+          {showChange && !ground && (
             <ImageOverlay url={fileUrl(event.layers.change)} bounds={event.bounds} zIndex={10} />
           )}
-          {subtle && event.layers.subtle && (
+          {subtle && !ground && event.layers.subtle && (
             <ImageOverlay url={fileUrl(event.layers.subtle)} bounds={event.bounds} zIndex={9} />
           )}
           <ImageOverlay
@@ -378,6 +410,7 @@ export function ChangeMap({
         pathOptions={{ color: "var(--primary)", weight: 1, dashArray: "4 4", fill: false, opacity: 0.6 }}
       />
       <Probe point={probe} onPick={onProbe} />
+      <HoverTracker onHover={onHover} />
       {showAreas && <AreaOutlines regions={event.regions} />}
       {showAreas && <RegionMarkers regions={event.regions} onPick={onRegion} />}
       <ScaleControl position="bottomright" imperial={false} />

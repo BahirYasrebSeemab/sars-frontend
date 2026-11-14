@@ -48,6 +48,15 @@ export interface Region {
   rings?: [number, number][][] | null
 }
 
+/** Ground classes coloured on both dates (sars-backend ground.py). */
+export type GroundClass = "water" | "smooth" | "medium" | "bright"
+
+/** km² of one ground class on each date, over ground the radar saw on both. */
+export interface GroundArea {
+  before_km2: number
+  after_km2: number
+}
+
 export interface SarEvent {
   id: string
   title: string
@@ -80,6 +89,7 @@ export interface SarEvent {
     mean_change_db: number
     noise_sigma_db: number
     histogram: { db: number; pixels: number }[]
+    ground?: Record<GroundClass, GroundArea> | null
   }
   regions: Region[]
   suspects?: Region[]
@@ -103,6 +113,9 @@ export interface SarEvent {
     // Dual-pol false colour (red HH, green HV, blue HH/HV), only when the mode has HV
     before_rgb?: string
     after_rgb?: string
+    /** Ground on each date in four classes, so the before side is coloured too. */
+    before_ground?: string
+    after_ground?: string
   }
 }
 
@@ -142,8 +155,15 @@ export interface Probe {
   hv_post_db?: number | null
 }
 
-export async function fetchProbe(eventId: string, lat: number, lon: number): Promise<Probe> {
-  const r = await fetch(`${API_URL}/api/v1/events/${eventId}/probe?lat=${lat}&lon=${lon}`)
+export async function fetchProbe(
+  eventId: string,
+  lat: number,
+  lon: number,
+  signal?: AbortSignal
+): Promise<Probe> {
+  const r = await fetch(`${API_URL}/api/v1/events/${eventId}/probe?lat=${lat}&lon=${lon}`, {
+    signal,
+  })
   if (!r.ok) throw new Error((await r.json().catch(() => null))?.detail ?? r.statusText)
   return r.json() as Promise<Probe>
 }

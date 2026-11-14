@@ -44,6 +44,12 @@
   --change-volume: #e07a1f;
   --change-rough: #63b5c2;
 
+  /* Ground on each date: fixed colours, the same as the PNGs (sars-backend ground.py). */
+  --ground-water: #1b3f7a;
+  --ground-smooth: #c8a26b;
+  --ground-medium: #7fae5a;
+  --ground-bright: #f1ead8;
+
   --shadow: 0 1px 2px rgb(15 37 51 / 0.08), 0 8px 24px -12px rgb(15 37 51 / 0.25);
   color-scheme: light;
 }
@@ -115,6 +121,10 @@
   --color-increase: var(--change-increase);
   --color-volume: var(--change-volume);
   --color-rough: var(--change-rough);
+  --color-ground-water: var(--ground-water);
+  --color-ground-smooth: var(--ground-smooth);
+  --color-ground-medium: var(--ground-medium);
+  --color-ground-bright: var(--ground-bright);
 
   --shadow-card: var(--shadow);
 
