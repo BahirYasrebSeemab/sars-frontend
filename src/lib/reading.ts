@@ -150,12 +150,9 @@ export function groundClassOf(db: number, event: SarEvent): GroundClass {
   return "bright"
 }
 
-/** Water ruffled by wind stays this dark (sars-backend ground.ROUGH_MAX_DB). */
-const ROUGH_MAX_DB = -9
-
-/** Ground classes of both dates, as the Ground view paints them: water on one date that is still
- * water-dark on the other is water on both (wind on a lake is not a lake drying out), unless the
- * change layer flagged a real darker/brighter change there. Mirrors ground.ground_pair. */
+/** Ground classes of both dates, as the Before & after view paints them: the after date differs
+ * from the before date only where the change layer measured a real change; a small shift that
+ * crosses a class line, or wind on water, keeps the before class. Mirrors ground.ground_pair. */
 export function groundPairOf(
   pre: number,
   post: number,
@@ -163,11 +160,8 @@ export function groundPairOf(
   event: SarEvent
 ): [GroundClass, GroundClass] {
   const a = groundClassOf(pre, event)
-  const b = groundClassOf(post, event)
-  const steady = flag == null || flag === "rough_water"
-  if (steady && a === "water" && post <= ROUGH_MAX_DB) return ["water", "water"]
-  if (steady && b === "water" && pre <= ROUGH_MAX_DB) return ["water", "water"]
-  return [a, b]
+  const changed = flag != null && flag !== "rough_water"
+  return [a, changed ? groundClassOf(post, event) : a]
 }
 
 /** Swatch and short name of each ground class (colours: --ground-* in index.css). */
