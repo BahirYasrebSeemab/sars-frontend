@@ -57,6 +57,45 @@ export interface GroundArea {
   after_km2: number
 }
 
+export interface StoryPhoto {
+  file: string
+  caption: string
+  credit: string
+  licence: string
+  source_url: string
+}
+
+/** What the radar measured at a story point; computed by the backend, never hand-written. */
+export interface PointRadar {
+  /** False: outside the analysed box, or the radar has no sample there on both dates. */
+  covered: boolean
+  pre_db: number | null
+  post_db: number | null
+  delta_db: number | null
+  flag: Probe["flag"]
+  /** Share of the ground within 300 m that changed. */
+  changed_pct_300m: number | null
+}
+
+export interface StoryPoint {
+  id: string
+  title: string
+  lat: number
+  lon: number
+  zoom: number
+  what_happened: string
+  photos: StoryPhoto[]
+  sources: { label: string; url: string }[]
+  radar: PointRadar | null
+}
+
+/** The event told through a few real places, in order (sars-backend story.json). */
+export interface Story {
+  summary: string
+  path: { label: string; points: [number, number][] } | null
+  points: StoryPoint[]
+}
+
 export interface SarEvent {
   id: string
   title: string
@@ -107,6 +146,7 @@ export interface SarEvent {
   } | null
   /** Nearest NASA HLS optical scene per radar date, or null when none within ±8 days. */
   hls: ({ date: string; layer: string } | null)[] | null
+  story?: Story | null
   layers: {
     before: string
     after: string

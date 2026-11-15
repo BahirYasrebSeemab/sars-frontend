@@ -35,6 +35,7 @@ import {
 import { ColourKey } from "@/components/colour-key"
 import { HelpCard } from "@/components/help-card"
 import { HoverCard, useHoverReading, type MapView } from "@/components/hover-reading"
+import { StoryPanel } from "@/components/story-panel"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   fetchProbe,
@@ -720,6 +721,9 @@ function Sidebar({
   onSelect,
   subtle,
   onPick,
+  storyIndex,
+  onStoryIndex,
+  onSatellite,
 }: {
   open: boolean
   onClose: () => void
@@ -730,6 +734,9 @@ function Sidebar({
   onSelect: (id: string) => void
   subtle: boolean
   onPick: (r: Region) => void
+  storyIndex: number | null
+  onStoryIndex: (i: number | null) => void
+  onSatellite: () => void
 }) {
   const scroller = React.useRef<HTMLDivElement>(null)
   // A new event starts at its details, not at the last event's scroll position.
@@ -788,7 +795,20 @@ function Sidebar({
                 )}
               </header>
 
-              <PlainSection title="What happened" lines={plainSummary(event)} />
+              {event.story && (
+                <StoryPanel
+                  story={event.story}
+                  event={event}
+                  index={storyIndex}
+                  onIndex={onStoryIndex}
+                  onSatellite={onSatellite}
+                />
+              )}
+
+              <PlainSection
+                title={event.story ? "What the radar measured" : "What happened"}
+                lines={plainSummary(event)}
+              />
               <PlainSection title="How to read the map" lines={howToRead(event)} />
 
               <div className="px-1">
@@ -958,6 +978,30 @@ export default function App() {
     [map, onProbe, divider, covered, wide]
   )
 
+  // The story: null is the overview, a number is one place; picking a place flies the map there.
+  const [storyIndex, setStoryIndex] = React.useState<number | null>(null)
+  React.useEffect(() => setStoryIndex(null), [eventId])
+  const onStoryIndex = React.useCallback(
+    (i: number | null) => {
+      setStoryIndex(i)
+      if (!map || !event) return
+      const padding = {
+        paddingTopLeft: [Math.max(divider, covered) + 48, 112] as [number, number],
+        paddingBottomRight: [48, wide ? 170 : 230] as [number, number],
+      }
+      const p = i == null ? null : event.story?.points[i]
+      if (!p) {
+        map.flyToBounds(event.bounds, { ...fit, duration: 0.8 })
+        return
+      }
+      // About 1.5 km around the place, clear of the sidebar, the divider and the bottom bars.
+      const d = 0.014
+      map.flyToBounds([[p.lat - d, p.lon - d], [p.lat + d, p.lon + d]], { ...padding, duration: 0.8 })
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [map, event, divider, covered, wide]
+  )
+
   const failure = events.error ?? error
   const empty = events.data?.length === 0
   const [optPre, optPost] = event ? opticalDates(event, basemap) : [null, null]
@@ -997,6 +1041,11 @@ export default function App() {
             divider={divider}
             onHover={onHover}
             view={view}
+            storyIndex={storyIndex}
+            onStoryPoint={(i) => {
+              if (!wide) setOpen(true)
+              onStoryIndex(i)
+            }}
           />
         ) : (
           <Skeleton className="absolute inset-0 rounded-none bg-muted" />
@@ -1091,6 +1140,13 @@ export default function App() {
           }}
           subtle={subtle}
           onPick={onRegion}
+          storyIndex={storyIndex}
+          onStoryIndex={(i) => {
+            // On a phone the sidebar covers the map: show the place, the pin reopens the card.
+            if (!wide && i != null) setOpen(false)
+            onStoryIndex(i)
+          }}
+          onSatellite={() => setBasemap("hls")}
         />
 
         {/* Pixel reading: bottom-right, above the toolbar row, clear of the sidebar. */}

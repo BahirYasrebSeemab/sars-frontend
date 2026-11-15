@@ -224,6 +224,52 @@ body { overflow: hidden; }
 }
 
 /* Leaflet marks every marker icon display:block; the badge needs flex to centre its number. */
+/* Story pins: lettered, in the accent colour, so they never read as the numbered areas. */
+.story-pin,
+.story-pin-inline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #c2410c;
+  color: #fff;
+  border: 2px solid #fff;
+  box-shadow: var(--shadow);
+  font: 700 12px var(--font-sans);
+}
+.story-pin {
+  cursor: pointer;
+  line-height: 1;
+  box-sizing: border-box;
+  overflow: visible;
+}
+.leaflet-marker-icon.story-pin {
+  display: flex !important;
+}
+.story-pin::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 2px;
+  height: 10px;
+  margin-left: -1px;
+  background: #c2410c;
+}
+.story-pin-on {
+  background: #fff;
+  color: #c2410c;
+  border-color: #c2410c;
+  transform-origin: center;
+  outline: 3px solid rgb(194 65 12 / 0.35);
+}
+.story-pin-inline {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
 .leaflet-marker-icon.region-badge {
   display: flex !important;
   line-height: 1;

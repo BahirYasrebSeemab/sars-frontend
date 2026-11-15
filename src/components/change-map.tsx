@@ -7,6 +7,7 @@ import {
   MapContainer,
   Marker,
   Polygon,
+  Polyline,
   Rectangle,
   ScaleControl,
   TileLayer,
@@ -15,7 +16,8 @@ import {
 } from "react-leaflet"
 
 import type { HoverPoint, MapView } from "@/components/hover-reading"
-import { API_URL, fileUrl, type Region, type SarEvent } from "@/lib/api"
+import { API_URL, fileUrl, type Region, type SarEvent, type Story } from "@/lib/api"
+import { pointLetter } from "@/lib/story"
 
 /** Area outlines as map lines (sharp at every zoom): a light halo under a dark line so they read
  * over radar, photos and change colours alike. They sit in their own unclipped pane, so the same
@@ -59,6 +61,46 @@ function RegionMarkers({ regions, onPick }: { regions: Region[]; onPick: (r: Reg
       eventHandlers={{ click: () => onPick(r) }}
     />
   ))
+}
+
+/** The story on the map: its path as a dashed line and one lettered pin per place (letters, so
+ * they are not taken for the numbered areas). Drawn in the unclipped pane, on both dates. */
+function StoryLayer({
+  story,
+  selected,
+  onPick,
+}: {
+  story: Story
+  selected: number | null
+  onPick: (i: number) => void
+}) {
+  return (
+    <>
+      {story.path && (
+        <>
+          <Polyline pane="areas" positions={story.path.points} interactive={false}
+            pathOptions={{ color: "#ffffff", weight: 6, opacity: 0.8 }} />
+          <Polyline pane="areas" positions={story.path.points} interactive={false}
+            pathOptions={{ color: "#c2410c", weight: 2.5, dashArray: "8 6" }} />
+        </>
+      )}
+      {story.points.map((p, i) => (
+        <Marker
+          key={p.id}
+          position={[p.lat, p.lon]}
+          title={p.title}
+          zIndexOffset={i === selected ? 2000 : 1000}
+          icon={divIcon({
+            className: i === selected ? "story-pin story-pin-on" : "story-pin",
+            html: pointLetter(i),
+            iconSize: [28, 28],
+            iconAnchor: [14, 38],
+          })}
+          eventHandlers={{ click: () => onPick(i) }}
+        />
+      ))}
+    </>
+  )
 }
 
 /** Where the backend keeps its copy of a dated NASA layer (`pipeline tiles`). */
@@ -328,6 +370,8 @@ export function ChangeMap({
   divider,
   onHover,
   view,
+  storyIndex,
+  onStoryPoint,
 }: {
   event: SarEvent
   showChange: boolean
@@ -351,6 +395,9 @@ export function ChangeMap({
   onHover: (point: HoverPoint | null) => void
   /** "ground": both dates coloured by ground class; "change": radar + change on the after side. */
   view: MapView
+  /** Selected story place (null: overview), and what a click on a story pin does. */
+  storyIndex: number | null
+  onStoryPoint: (i: number) => void
 }) {
   const base: BasemapDef = BASEMAPS[basemap]
   const ground = view === "ground" && !!event.layers.before_ground && !!event.layers.after_ground
@@ -413,6 +460,7 @@ export function ChangeMap({
       <HoverTracker onHover={onHover} />
       {showAreas && <AreaOutlines regions={event.regions} />}
       {showAreas && <RegionMarkers regions={event.regions} onPick={onRegion} />}
+      {event.story && <StoryLayer story={event.story} selected={storyIndex} onPick={onStoryPoint} />}
       <ScaleControl position="bottomright" imperial={false} />
     </MapContainer>
   )
