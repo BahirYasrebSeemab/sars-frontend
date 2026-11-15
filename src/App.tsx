@@ -872,12 +872,21 @@ function Sidebar({
 
 /* ---------- page ---------- */
 
+/** What a visitor sees first: this event, only the changes, with the Landscape 500 m layer on,
+ * over the dated satellite photos. */
+const DEFAULT_EVENT = "thunder-bay-36"
+const DEFAULT_VIEW: MapView = "change"
+const DEFAULT_BASEMAP: Basemap = "hls"
+const DEFAULT_LANDSCAPE = true
+
 export default function App() {
   const [dark, toggleDark] = useTheme()
   const wide = useWide()
   const events = useApi<EventSummary[]>("/events")
   const [selected, setSelected] = React.useState<string>()
-  const eventId = selected ?? events.data?.[0]?.id
+  // Opens on the default event when it is there, else on the first in the list.
+  const eventId =
+    selected ?? (events.data?.find((e) => e.id === DEFAULT_EVENT) ?? events.data?.[0])?.id
   const { data: event, error } = useApi<SarEvent>(eventId ? `/events/${eventId}` : null)
 
   const [map, setMap] = React.useState<LeafletMap | null>(null)
@@ -908,9 +917,9 @@ export default function App() {
   const [showChange, setShowChange] = React.useState(true)
   const [showAreas, setShowAreas] = React.useState(true)
   const [opacity, setOpacity] = React.useState(0.9)
-  const [basemap, setBasemap] = React.useState<Basemap>("gray")
+  const [basemap, setBasemap] = React.useState<Basemap>(DEFAULT_BASEMAP)
   const [colour, setColour] = React.useState(false)
-  const [subtle, setSubtle] = React.useState(false)
+  const [subtle, setSubtle] = React.useState(DEFAULT_LANDSCAPE)
   const [probe, setProbe] = React.useState<{
     lat: number
     lon: number
@@ -930,7 +939,7 @@ export default function App() {
   )
   React.useEffect(() => setProbe(null), [eventId])
   const [hover, onHover] = useHoverReading(event)
-  const [viewChoice, setView] = React.useState<MapView>("ground")
+  const [viewChoice, setView] = React.useState<MapView>(DEFAULT_VIEW)
   // Events processed before the ground layer existed only have the change view.
   const hasGround = !!event?.layers.before_ground && !!event?.stats.ground
   const view: MapView = hasGround ? viewChoice : "change"
@@ -1236,7 +1245,8 @@ export default function App() {
           data-testid="toolbar"
           className={cn(
             bar,
-            "absolute bottom-12 flex -translate-x-1/2 items-center gap-0.5 p-1 transition-[left] duration-300 sm:bottom-5"
+            // Never wider than the screen: on a phone the switches scroll sideways inside the bar.
+            "absolute bottom-12 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 items-center gap-0.5 overflow-x-auto p-1 transition-[left] duration-300 sm:bottom-5"
           )}
           style={{ left: covered + free / 2 }}
         >
