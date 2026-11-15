@@ -91,12 +91,17 @@ with sync_playwright() as p:
         ),
     )
     print("chips:", pg.locator("[data-testid^=chip] span span:last-child").all_inner_texts())
+    # The change layers and their switches live in the "Only changes" view.
+    only_changes = pg.get_by_role("radio", name="Only changes")
+    if only_changes.count():
+        only_changes.click()
+        pg.wait_for_timeout(1000)
     colour = pg.get_by_role("switch", name="Colour (HH/HV)")
     if colour.count():
         colour.click()
         pg.wait_for_timeout(2000)
         print("colour layers:", sorted({i.get_attribute("src").split("/")[-1] for i in pg.locator(".leaflet-image-layer").all()}))
-    search = pg.get_by_placeholder("Search by number, darker, growth, double bounce")
+    search = pg.get_by_placeholder("Search by number, or darker, brighter, rougher")
     search.fill("darker")
     pg.wait_for_timeout(300)
     print("area search 'darker':", pg.locator("aside ol li").count(), "of", pg.locator("[data-testid=area-list]").locator("xpath=..").locator("p").last.inner_text())
@@ -129,7 +134,7 @@ with sync_playwright() as p:
     mob.goto(URL)
     mob.wait_for_timeout(7000)
     print("phone: sidebar closed by default:", mob.get_by_role("complementary", name="Events and details").count() == 0)
-    tb = mob.get_by_role("button", name="Zoom out").locator("xpath=..").bounding_box()
+    tb = mob.get_by_test_id("toolbar").bounding_box()
     print(f"360px toolbar x={tb['x']:.0f} right={tb['x'] + tb['width']:.0f} | overflow:", mob.evaluate("document.documentElement.scrollWidth > innerWidth"))
     print("errors:", errs or "none")
     b.close()
