@@ -1,51 +1,65 @@
 import { ChevronLeftIcon, ChevronRightIcon, PlayIcon, XIcon } from "lucide-react"
 import * as React from "react"
 
-import { formatDate, type SarEvent, type Story, type StoryPoint } from "@/lib/api"
+import { fileUrl, formatDate, type SarEvent, type Story, type StoryPoint } from "@/lib/api"
 import { radarSentence } from "@/lib/story"
 import { cn } from "@/lib/utils"
 
 const navBtn =
   "flex h-10 items-center gap-1.5 rounded-lg px-4 text-[14px] font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
 
-/** Web-mercator tile holding a point, for a dated NASA photo thumbnail. */
-function photoTile(lat: number, lon: number, z: number, date: string, layer: string) {
-  const n = 2 ** z
-  const x = Math.floor(((lon + 180) / 360) * n)
-  const rad = (lat * Math.PI) / 180
-  const y = Math.floor(((1 - Math.asinh(Math.tan(rad)) / Math.PI) / 2) * n)
-  return `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer}/default/${date}/GoogleMapsCompatible_Level12/${z}/${y}/${x}.png`
+type Box = [[number, number], [number, number]]
+
+/** One of the event's own map images, cropped to a box: a "map picture" of the place. */
+function Crop({ layers, event, box }: { layers: string[]; event: SarEvent; box: Box }) {
+  const [[south, west], [north, east]] = event.bounds
+  const [[bs, bw], [bn, be]] = box
+  const style: React.CSSProperties = {
+    position: "absolute",
+    width: `${((east - west) / (be - bw)) * 100}%`,
+    height: `${((north - south) / (bn - bs)) * 100}%`,
+    left: `${(-(bw - west) / (be - bw)) * 100}%`,
+    top: `${(-(north - bn) / (bn - bs)) * 100}%`,
+    maxWidth: "none",
+    imageRendering: "pixelated",
+  }
+  return (
+    <>
+      {layers.map((l) => (
+        <img key={l} src={fileUrl(l)} alt="" style={style} />
+      ))}
+    </>
+  )
 }
 
-/** Satellite photos of the place on both dates, side by side. Hidden when NASA has no clear
- * scene (the image fails or is empty), rather than showing a broken picture. */
-function PhotoPair({ point, event }: { point: StoryPoint; event: SarEvent }) {
-  const [failed, setFailed] = React.useState(false)
-  const [pre, post] = event.hls ?? [null, null]
-  React.useEffect(() => setFailed(false), [point.id])
-  if (!pre || !post || failed) return null
-  const z = point.zoom >= 12 ? 11 : 10
-  const sides: [string, { date: string; layer: string }][] = [
-    ["Before", pre],
-    ["After", post],
+/** The radar's own before and after of the step's place, side by side: gray radar before, and
+ * after with the change colours on top, so the difference is the coloured part. */
+function RadarPair({ point, event }: { point: StoryPoint; event: SarEvent }) {
+  const region = point.area == null ? null : event.regions.find((r) => r.n === point.area)
+  const d = 0.02
+  const raw: Box = region?.box ?? [[point.lat - d, point.lon - d], [point.lat + d, point.lon + d]]
+  // Square on the ground (a degree of longitude is shorter than one of latitude), a little margin.
+  const k = Math.cos((point.lat * Math.PI) / 180)
+  const half = Math.max(raw[1][0] - raw[0][0], (raw[1][1] - raw[0][1]) * k) * 0.55
+  const cy = (raw[0][0] + raw[1][0]) / 2
+  const cx = (raw[0][1] + raw[1][1]) / 2
+  const box: Box = [[cy - half, cx - half / k], [cy + half, cx + half / k]]
+  const sides: [string, string, string[]][] = [
+    ["Before", event.pre.datetime, [event.layers.before]],
+    ["After", event.post.datetime, [event.layers.after, event.layers.change]],
   ]
   return (
     <div className="grid grid-cols-2 gap-1.5">
-      {sides.map(([name, h]) => (
-        <figure key={name} className="relative overflow-hidden rounded-lg bg-muted">
-          <img
-            src={photoTile(point.lat, point.lon, z, h.date, h.layer)}
-            alt={`Satellite photo, ${name.toLowerCase()}: ${formatDate(h.date)}`}
-            className="aspect-square w-full object-cover"
-            onError={() => setFailed(true)}
-          />
-          <figcaption className="absolute inset-x-0 bottom-0 bg-black/55 px-2 py-1 text-[11px] font-medium text-white">
-            {name} · {formatDate(h.date)}
+      {sides.map(([name, date, layers]) => (
+        <figure key={name} className="relative aspect-square overflow-hidden rounded-lg bg-neutral-800">
+          <Crop layers={layers} event={event} box={box} />
+          <figcaption className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[11px] font-medium text-white">
+            {name} · {formatDate(date)}
           </figcaption>
         </figure>
       ))}
       <p className="col-span-2 text-[11px] text-muted-foreground">
-        Satellite photos: NASA HLS (Landsat / Sentinel-2). Clouds can hide the ground.
+        The radar's own pictures of this place. Colour on the right marks what changed.
       </p>
     </div>
   )
@@ -136,7 +150,18 @@ export function StoryCard({
           <h3 className="text-[15px] leading-snug font-semibold" data-testid="story-title">
             {point.title}
           </h3>
-          <PhotoPair point={point} event={event} />
+          {point.photos.map((ph) => (
+            <figure key={ph.file} className="flex flex-col gap-1">
+              <img src={fileUrl(ph.file)} alt={ph.caption} className="w-full rounded-lg border border-foreground/10" />
+              <figcaption className="text-xs leading-snug text-muted-foreground">
+                {ph.caption}{" "}
+                <a href={ph.source_url} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                  Photo: {ph.credit}, {ph.licence}
+                </a>
+              </figcaption>
+            </figure>
+          ))}
+          {isPlace && point.show?.radar_opacity !== 0 && <RadarPair point={point} event={event} />}
           <p className="text-[14px] leading-relaxed">{point.what_happened}</p>
           {isPlace && point.show?.radar_opacity !== 0 && (
             <div className="rounded-lg bg-foreground/5 px-3 py-2.5">
