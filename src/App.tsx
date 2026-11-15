@@ -6,6 +6,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
   ChevronsUpDownIcon,
+  CircleHelpIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   LayersIcon,
@@ -32,10 +33,10 @@ import {
   type Basemap,
 } from "@/components/change-map"
 import { ColourKey } from "@/components/colour-key"
+import { HelpCard } from "@/components/help-card"
 import { HoverCard, useHoverReading, type MapView } from "@/components/hover-reading"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
-  daysBetween,
   fetchProbe,
   fileUrl,
   formatDate,
@@ -47,6 +48,7 @@ import {
   type SarEvent,
 } from "@/lib/api"
 import { changeKey, groundKey } from "@/lib/colour-key"
+import { friendlyArea, howToRead, plainDates, plainSummary } from "@/lib/plain"
 import { CLASS_SWATCH, HAZARD, doubleBounce, readsAs, wording } from "@/lib/reading"
 import { cn } from "@/lib/utils"
 
@@ -132,9 +134,6 @@ const num = (v?: number | null, d = 1) =>
     : v > 0 && v < 0.01
       ? "<0.01"
       : v.toLocaleString(undefined, { maximumFractionDigits: Math.abs(v) < 1 ? 2 : d })
-
-const longDate = (iso: string) =>
-  new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })
 
 /* ---------- wording ---------- */
 
@@ -222,26 +221,29 @@ function SwipeHandle({
 
 /** Which colours the map paints: the ground on both dates, or the change on the after date. */
 function ViewSwitch({ view, onChange }: { view: MapView; onChange: (v: MapView) => void }) {
-  const options: [MapView, string, string][] = [
-    ["ground", "Ground", "Colour both dates by what the ground was: water, bare, fields, bright"],
-    ["change", "Change", "Colour only what changed, on the after date"],
+  // [view, label, short label for phones, tooltip]
+  const options: [MapView, string, string, string][] = [
+    ["ground", "Before & after", "Land", "Colour what the land looked like on each date: water, bare ground, fields, bright"],
+    ["change", "Only changes", "Changes", "Colour only the spots that changed between the two dates"],
   ]
   return (
     <div role="radiogroup" aria-label="Map colours" className="flex h-9 items-center rounded-md bg-muted/60 p-0.5">
-      {options.map(([v, text, tip]) => (
+      {options.map(([v, text, short, tip]) => (
         <button
           key={v}
           type="button"
           role="radio"
           aria-checked={view === v}
+          aria-label={text}
           title={tip}
           onClick={() => onChange(v)}
           className={cn(
-            "h-8 rounded-[5px] px-2.5 text-[13px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "h-8 rounded-[5px] px-2.5 text-[13px] font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
             view === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
           )}
         >
-          {text}
+          <span className="sm:hidden">{short}</span>
+          <span className="hidden sm:inline">{text}</span>
         </button>
       ))}
     </div>
@@ -324,10 +326,12 @@ function ClassTable({ event }: { event: SarEvent }) {
   )
 }
 
-const ZONE_PARTS: [keyof NonNullable<Region["breakdown"]>, string, string][] = [
-  ["decrease", "bg-decrease", "darker"],
-  ["increase", "bg-increase", "double bounce"],
-  ["volume", "bg-volume", "growth"],
+/** Kinds of change inside an area: key, swatch, plain name, and the words a search accepts
+ * (the technical names too, so "double bounce" still finds them). */
+const ZONE_PARTS: [keyof NonNullable<Region["breakdown"]>, string, string, string[]][] = [
+  ["decrease", "bg-decrease", "darker", ["darker", "water"]],
+  ["increase", "bg-increase", "brighter (walls, trunks)", ["brighter", "walls", "double bounce"]],
+  ["volume", "bg-volume", "rougher or greener", ["rougher", "greener", "growth"]],
 ]
 
 /** Search the areas: a number finds that area (1 finds 1, 10, 11...); a word finds every area
@@ -335,7 +339,9 @@ const ZONE_PARTS: [keyof NonNullable<Region["breakdown"]>, string, string][] = [
 function searchAreas(regions: Region[], query: string): Region[] {
   if (!query) return regions
   if (/^\d+$/.test(query)) return regions.filter((r) => String(r.n).startsWith(query))
-  const part = ZONE_PARTS.find(([, , name]) => name.startsWith(query) || query.startsWith(name))
+  const part = ZONE_PARTS.find(([, , , words]) =>
+    words.some((w) => w.startsWith(query) || query.startsWith(w))
+  )
   if (!part) return []
   const [k] = part
   return regions
@@ -411,7 +417,7 @@ function AreaSearch({ event, onPick }: { event: SarEvent; onPick: (r: Region) =>
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by number, darker, growth, double bounce"
+          placeholder="Search by number, or darker, brighter, rougher"
           className="h-10 w-full bg-transparent pr-3 pl-9 text-[13px] outline-none placeholder:text-muted-foreground"
         />
       </label>
@@ -431,8 +437,51 @@ function AreaSearch({ event, onPick }: { event: SarEvent; onPick: (r: Region) =>
   )
 }
 
-/** Heading, the rule in plain words, the list, and what the list leaves out. */
+/** A heading and a few plain sentences. */
+function PlainSection({ title, lines }: { title: string; lines: string[] }) {
+  return (
+    <section className="flex flex-col gap-2 px-1">
+      <h2 className="text-[15px] font-semibold">{title}</h2>
+      <ul className="flex flex-col gap-1.5 text-[14px] leading-relaxed">
+        {lines.map((l) => (
+          <li key={l} className="flex gap-2">
+            <span aria-hidden className="mt-[0.6em] size-1.5 shrink-0 rounded-full bg-primary" />
+            <span>{l}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+/** The numbered places in plain words, with the searchable list. */
 function AreasSection({ event, onPick }: { event: SarEvent; onPick: (r: Region) => void }) {
+  const rule = event.area_rule
+  if (!rule) return null
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-[15px] font-semibold">Numbered places</h2>
+      {event.regions.length > 0 ? (
+        <>
+          <p className="text-[13px] leading-relaxed text-muted-foreground">
+            The places where the change is packed together, biggest first. Together they hold{" "}
+            {rule.coverage_pct}% of all the change ({friendlyArea(rule.total_km2)}). Click one to fly
+            there.
+          </p>
+          <AreaSearch event={event} onPick={onPick} />
+        </>
+      ) : (
+        <p className="text-[13px] leading-relaxed text-muted-foreground">
+          None: the {friendlyArea(rule.total_km2)} that changed is spread thinly, with no place where
+          it is packed together.
+        </p>
+      )}
+    </section>
+  )
+}
+
+/** How the numbered places are defined, for the technical section. */
+function AreaRule({ event }: { event: SarEvent }) {
   const rule = event.area_rule
   if (!rule) return null
   const denser =
@@ -442,23 +491,12 @@ function AreasSection({ event, onPick }: { event: SarEvent; onPick: (r: Region) 
   return (
     <section className="flex flex-col gap-2">
       <h2 className="text-[15px] font-semibold">Areas of concentrated change</h2>
-      {event.regions.length > 0 ? (
-        <>
-          <p className="text-[13px] leading-relaxed text-muted-foreground">
-            Outlined and numbered on the map: every place where {denser}, measured over{" "}
-            {rule.window_km} km and split into compact areas of at least {rule.min_km2} km² of
-            change. Together they hold {rule.coverage_pct}% of the {num(rule.total_km2)} km² of
-            changed land; elsewhere change is thinner than average. Wind on open water is not
-            counted.
-          </p>
-          <AreaSearch event={event} onPick={onPick} />
-        </>
-      ) : (
-        <p className="text-[13px] leading-relaxed text-muted-foreground">
-          No area stands out. The {num(rule.total_km2)} km² of changed land is thinly scattered: no
-          place holds {rule.min_km2} km² of concentrated change.
-        </p>
-      )}
+      <p className="text-[13px] leading-relaxed text-muted-foreground">
+        Every place where {denser}, measured over {rule.window_km} km and split into compact areas
+        of at least {rule.min_km2} km² of change (watershed around density peaks). Together they
+        hold {rule.coverage_pct}% of the {num(rule.total_km2)} km² of changed land. Wind on open
+        water is not counted.
+      </p>
     </section>
   )
 }
@@ -737,16 +775,12 @@ function Sidebar({
                 <h1 className="text-xl leading-snug font-bold tracking-tight text-balance">
                   {event.title}
                 </h1>
-                <p className={label}>
-                  {longDate(event.pre.datetime)} to {longDate(event.post.datetime)},{" "}
-                  {daysBetween(event.pre.datetime, event.post.datetime)} days apart
-                </p>
+                <p className={label}>{plainDates(event)}</p>
                 {event.synthetic && (
                   <p className="text-xs font-medium text-destructive">
                     Synthetic demo: simulated, not NISAR data
                   </p>
                 )}
-                <p className="mt-1 text-[14px] leading-relaxed">{headline(event)}</p>
                 {(event.location || event.description) && (
                   <p className="text-[13px] leading-relaxed text-muted-foreground">
                     {[event.location, event.description].filter(Boolean).join(". ")}
@@ -754,8 +788,23 @@ function Sidebar({
                 )}
               </header>
 
-              <section className="flex flex-col gap-2 px-1">
-                <h2 className="text-[15px] font-semibold">What the colours show</h2>
+              <PlainSection title="What happened" lines={plainSummary(event)} />
+              <PlainSection title="How to read the map" lines={howToRead(event)} />
+
+              <div className="px-1">
+                <AreasSection event={event} onPick={onPick} />
+              </div>
+
+              <details className="group rounded-xl border border-foreground/10 px-4 py-3 open:pb-5">
+                <summary className="flex cursor-pointer list-none items-center gap-2 text-[15px] font-semibold select-none [&::-webkit-details-marker]:hidden">
+                  <ChevronRightIcon className="size-4 transition-transform group-open:rotate-90" />
+                  Technical details
+                  <span className="ml-auto text-xs font-normal text-muted-foreground">for experts</span>
+                </summary>
+                <div className="mt-4 flex flex-col gap-7">
+              <p className="text-[14px] leading-relaxed">{headline(event)}</p>
+              <section className="flex flex-col gap-2">
+                <h2 className="text-[15px] font-semibold">Change classes</h2>
                 <ClassTable event={event} />
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {num(s.aoi_km2)} km² analysed, {num(s.changed_pct)}% of it changed by{" "}
@@ -780,13 +829,19 @@ function Sidebar({
                     scene, orange above and blue below ±{s.subtle_threshold_db} dB.
                   </p>
                 )}
+                {event.pixel_m != null && (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Pixel size {event.pixel_m} m
+                    {(event.looks ?? 1) > 1
+                      ? `: ${event.looks}×${event.looks} pixels averaged to fit the processing computer's memory.`
+                      : " (full resolution)."}
+                  </p>
+                )}
               </section>
 
-              <div className="px-1">
-                <AreasSection event={event} onPick={onPick} />
-              </div>
+              {event.area_rule && <AreaRule event={event} />}
 
-              <section className="flex flex-col gap-2 px-1">
+              <section className="flex flex-col gap-2">
                 <h2 className="text-[15px] font-semibold">How much each pixel changed</h2>
                 <p className="text-[13px] text-muted-foreground">
                   Number of pixels by change in signal strength, square-root scale. The dashed
@@ -795,12 +850,10 @@ function Sidebar({
                 <ChangeHistogram event={event} />
               </section>
 
-              <div className="px-1">
-                <Reading event={event} />
-              </div>
-              <div className="px-1">
-                <Provenance event={event} />
-              </div>
+              <Reading event={event} />
+              <Provenance event={event} />
+                </div>
+              </details>
 
               <p className="mx-1 border-t border-foreground/10 pt-4 text-[12px] leading-relaxed text-muted-foreground">
                 Built for the NASA Space Apps Challenge 2026, Dancing with the SARs. Radar: NISAR
@@ -880,6 +933,13 @@ export default function App() {
   // Events processed before the ground layer existed only have the change view.
   const hasGround = !!event?.layers.before_ground && !!event?.stats.ground
   const view: MapView = hasGround ? viewChoice : "change"
+  // The how-to card opens by itself on a first visit, then only from the "?" button.
+  const [helpSeen, setHelpSeen] = useStored<"yes" | "no">("helpSeen", () => "no")
+  const [showHelp, setShowHelp] = React.useState(() => helpSeen === "no")
+  const closeHelp = React.useCallback(() => {
+    setShowHelp(false)
+    setHelpSeen("yes")
+  }, [setHelpSeen])
 
   const onRegion = React.useCallback(
     (r: Region) => {
@@ -1088,20 +1148,38 @@ export default function App() {
 
         {event && (
           <ColourKey
-            title={view === "ground" ? "Ground · before → after" : "Change · after date"}
+            title={view === "ground" ? "Before & after" : "Only changes"}
+            hint={
+              view === "ground"
+                ? "What the land looked like on each date. Numbers: area before → after. Click a colour."
+                : "Spots that changed between the two dates, shown on the second date. Click a colour."
+            }
             entries={view === "ground" ? groundKey(event) : changeKey(event)}
             left={covered + free / 2}
           />
         )}
 
+        {showHelp && <HelpCard onClose={closeHelp} left={covered + free / 2} />}
+
         {/* Toolbar */}
         <div
+          data-testid="toolbar"
           className={cn(
             bar,
             "absolute bottom-12 flex -translate-x-1/2 items-center gap-0.5 p-1 transition-[left] duration-300 sm:bottom-5"
           )}
           style={{ left: covered + free / 2 }}
         >
+          <button
+            type="button"
+            aria-label="How to use this map"
+            title="How to use this map"
+            aria-expanded={showHelp}
+            onClick={() => (showHelp ? closeHelp() : setShowHelp(true))}
+            className={iconBtn}
+          >
+            <CircleHelpIcon className="size-4" />
+          </button>
           {hasGround && (
             <>
               <ViewSwitch view={view} onChange={setView} />
@@ -1159,7 +1237,7 @@ export default function App() {
             aria-label="Zoom out"
             disabled={!map}
             onClick={() => map?.zoomOut()}
-            className={iconBtn}
+            className={cn(iconBtn, "max-sm:hidden")}
           >
             <MinusIcon className="size-4" />
           </button>
@@ -1168,7 +1246,7 @@ export default function App() {
             aria-label="Zoom in"
             disabled={!map}
             onClick={() => map?.zoomIn()}
-            className={iconBtn}
+            className={cn(iconBtn, "max-sm:hidden")}
           >
             <PlusIcon className="size-4" />
           </button>

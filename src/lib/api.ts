@@ -66,6 +66,9 @@ export interface SarEvent {
   synthetic: boolean
   product: string
   threshold_db: number
+  /** NxN pixels averaged to fit the processing computer's memory (1 = full resolution). */
+  looks?: number
+  pixel_m?: number | null
   threshold_auto: boolean
   cross_pol: boolean
   display_db: [number, number] | null

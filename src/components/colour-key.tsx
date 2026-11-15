@@ -50,11 +50,14 @@ function Explanation({ entry, onClose }: { entry: KeyEntry; onClose: () => void 
  */
 export function ColourKey({
   title,
+  hint,
   entries,
   left,
 }: {
-  /** What the colours are, e.g. "Change (after date)". */
+  /** What the colours are, e.g. "Only changes". */
   title: string
+  /** One plain sentence on what the colours show and that they can be clicked. */
+  hint: string
   entries: KeyEntry[]
   /** Centre x in px. */
   left: number
@@ -81,10 +84,11 @@ export function ColourKey({
       data-testid="colour-key"
     >
       {current && <Explanation entry={current} onClose={() => setOpen(null)} />}
-      <div className="glass pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto rounded-xl p-1">
-        <span className="shrink-0 px-2 text-[11px] font-medium tracking-wide whitespace-nowrap text-muted-foreground uppercase">
-          {title}
-        </span>
+      <div className="glass pointer-events-auto flex max-w-full flex-col rounded-xl p-1">
+        <p className="px-2 pt-1 pb-0.5 text-[11px] leading-snug text-muted-foreground">
+          <b className="font-semibold text-foreground">{title}:</b> {hint}
+        </p>
+        <div className="flex max-w-full items-center gap-0.5 overflow-x-auto">
         {entries.map((e) => (
           <button
             key={e.id}
@@ -105,6 +109,7 @@ export function ColourKey({
             </span>
           </button>
         ))}
+        </div>
       </div>
     </div>
   )
