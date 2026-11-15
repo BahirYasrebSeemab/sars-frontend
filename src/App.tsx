@@ -35,7 +35,7 @@ import {
 import { ColourKey } from "@/components/colour-key"
 import { HelpCard } from "@/components/help-card"
 import { HoverCard, useHoverReading, type MapView } from "@/components/hover-reading"
-import { StoryPanel } from "@/components/story-panel"
+import { StoryCard } from "@/components/story-panel"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   fetchProbe,
@@ -721,9 +721,6 @@ function Sidebar({
   onSelect,
   subtle,
   onPick,
-  storyIndex,
-  onStoryIndex,
-  onSatellite,
 }: {
   open: boolean
   onClose: () => void
@@ -734,9 +731,6 @@ function Sidebar({
   onSelect: (id: string) => void
   subtle: boolean
   onPick: (r: Region) => void
-  storyIndex: number | null
-  onStoryIndex: (i: number | null) => void
-  onSatellite: () => void
 }) {
   const scroller = React.useRef<HTMLDivElement>(null)
   // A new event starts at its details, not at the last event's scroll position.
@@ -795,20 +789,7 @@ function Sidebar({
                 )}
               </header>
 
-              {event.story && (
-                <StoryPanel
-                  story={event.story}
-                  event={event}
-                  index={storyIndex}
-                  onIndex={onStoryIndex}
-                  onSatellite={onSatellite}
-                />
-              )}
-
-              <PlainSection
-                title={event.story ? "What the radar measured" : "What happened"}
-                lines={plainSummary(event)}
-              />
+              <PlainSection title="What happened" lines={plainSummary(event)} />
               <PlainSection title="How to read the map" lines={howToRead(event)} />
 
               <div className="px-1">
@@ -978,28 +959,50 @@ export default function App() {
     [map, onProbe, divider, covered, wide]
   )
 
-  // The story: null is the overview, a number is one place; picking a place flies the map there.
+  // The story is a guided tour: null is the opening card, a number is one step. Each step flies
+  // the map to its place and switches to the layers it talks about.
   const [storyIndex, setStoryIndex] = React.useState<number | null>(null)
-  React.useEffect(() => setStoryIndex(null), [eventId])
+  const [storyOpen, setStoryOpen] = React.useState(true)
+  React.useEffect(() => {
+    setStoryIndex(null)
+    setStoryOpen(true)
+  }, [eventId])
   const onStoryIndex = React.useCallback(
     (i: number | null) => {
       setStoryIndex(i)
       if (!map || !event) return
-      const padding = {
-        paddingTopLeft: [Math.max(divider, covered) + 48, 112] as [number, number],
-        paddingBottomRight: [48, wide ? 170 : 230] as [number, number],
-      }
       const p = i == null ? null : event.story?.points[i]
       if (!p) {
         map.flyToBounds(event.bounds, { ...fit, duration: 0.8 })
         return
       }
-      // About 1.5 km around the place, clear of the sidebar, the divider and the bottom bars.
+      const show = p.show
+      if (show?.view) setView(show.view)
+      if (show?.subtle != null) setSubtle(show.subtle)
+      if (show?.basemap && show.basemap in BASEMAPS) setBasemap(show.basemap as Basemap)
+      if (show?.radar_opacity != null) {
+        setOpacity(show.radar_opacity)
+        // With the radar hidden to show the photos, the change colours would float on them.
+        setShowChange(show.radar_opacity > 0)
+      }
+      // 0 = all after, 1 = all before, measured over the part of the map the sidebar leaves free.
+      if (show?.split != null) setSplit(minSplit + show.split * (1 - minSplit))
+      setProbe(null)
+      // Clear of the sidebar on the left, the story card on the right and the bars below.
+      const padding = {
+        paddingTopLeft: [covered + 40, 80] as [number, number],
+        paddingBottomRight: [wide ? 440 : 24, wide ? 170 : 230] as [number, number],
+        duration: 0.9,
+      }
+      const region = p.area == null ? null : event.regions.find((r) => r.n === p.area)
+      // A step about the whole scene (zoom below 11) frames the scene; a place gets ~1.5 km.
       const d = 0.014
-      map.flyToBounds([[p.lat - d, p.lon - d], [p.lat + d, p.lon + d]], { ...padding, duration: 0.8 })
+      const target: [[number, number], [number, number]] =
+        region?.box ?? (p.zoom < 11 ? event.bounds : [[p.lat - d, p.lon - d], [p.lat + d, p.lon + d]])
+      map.flyToBounds(target, padding)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [map, event, divider, covered, wide]
+    [map, event, covered, wide, minSplit]
   )
 
   const failure = events.error ?? error
@@ -1042,10 +1045,7 @@ export default function App() {
             onHover={onHover}
             view={view}
             storyIndex={storyIndex}
-            onStoryPoint={(i) => {
-              if (!wide) setOpen(true)
-              onStoryIndex(i)
-            }}
+            onStoryPoint={onStoryIndex}
           />
         ) : (
           <Skeleton className="absolute inset-0 rounded-none bg-muted" />
@@ -1140,13 +1140,6 @@ export default function App() {
           }}
           subtle={subtle}
           onPick={onRegion}
-          storyIndex={storyIndex}
-          onStoryIndex={(i) => {
-            // On a phone the sidebar covers the map: show the place, the pin reopens the card.
-            if (!wide && i != null) setOpen(false)
-            onStoryIndex(i)
-          }}
-          onSatellite={() => setBasemap("hls")}
         />
 
         {/* Pixel reading: bottom-right, above the toolbar row, clear of the sidebar. */}
@@ -1215,6 +1208,27 @@ export default function App() {
           />
         )}
 
+        {event?.story && storyOpen && !showHelp && (
+          <StoryCard
+            story={event.story}
+            event={event}
+            index={storyIndex}
+            onIndex={onStoryIndex}
+            onClose={() => {
+              setStoryOpen(false)
+              setStoryIndex(null)
+            }}
+          />
+        )}
+        {event?.story && !storyOpen && (
+          <button
+            type="button"
+            onClick={() => setStoryOpen(true)}
+            className="pointer-events-auto absolute top-14 right-3 z-20 rounded-full bg-[#c2410c] px-4 py-2 text-[13px] font-bold text-white shadow-lg hover:bg-[#9a3412]"
+          >
+            ▶ The story
+          </button>
+        )}
         {showHelp && <HelpCard onClose={closeHelp} left={covered + free / 2} />}
 
         {/* Toolbar */}

@@ -67,15 +67,28 @@ function RegionMarkers({ regions, onPick }: { regions: Region[]; onPick: (r: Reg
  * they are not taken for the numbered areas). Drawn in the unclipped pane, on both dates. */
 function StoryLayer({
   story,
+  regions,
   selected,
   onPick,
 }: {
   story: Story
+  regions: Region[]
   selected: number | null
   onPick: (i: number) => void
 }) {
+  const step = selected == null ? null : story.points[selected]
+  const area = step?.area == null ? null : regions.find((r) => r.n === step.area)
   return (
     <>
+      {/* The step's area, outlined so the eye lands on it. */}
+      {area?.rings?.length && (
+        <>
+          <Polygon pane="areas" positions={area.rings} interactive={false}
+            pathOptions={{ color: "#ffffff", weight: 8, opacity: 0.9, fill: false }} />
+          <Polygon pane="areas" positions={area.rings} interactive={false}
+            pathOptions={{ color: "#c2410c", weight: 4, fillColor: "#c2410c", fillOpacity: 0.08 }} />
+        </>
+      )}
       {story.path && (
         <>
           <Polyline pane="areas" positions={story.path.points} interactive={false}
@@ -84,7 +97,8 @@ function StoryLayer({
             pathOptions={{ color: "#c2410c", weight: 2.5, dashArray: "8 6" }} />
         </>
       )}
-      {story.points.map((p, i) => (
+      {/* Pins only while the story is being told, and only for steps about one place. */}
+      {story.points.map((p, i) => i === selected && p.area == null && p.zoom >= 11 && (
         <Marker
           key={p.id}
           position={[p.lat, p.lon]}
@@ -460,7 +474,9 @@ export function ChangeMap({
       <HoverTracker onHover={onHover} />
       {showAreas && <AreaOutlines regions={event.regions} />}
       {showAreas && <RegionMarkers regions={event.regions} onPick={onRegion} />}
-      {event.story && <StoryLayer story={event.story} selected={storyIndex} onPick={onStoryPoint} />}
+      {event.story && (
+        <StoryLayer story={event.story} regions={event.regions} selected={storyIndex} onPick={onStoryPoint} />
+      )}
       <ScaleControl position="bottomright" imperial={false} />
     </MapContainer>
   )

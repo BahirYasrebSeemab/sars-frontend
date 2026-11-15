@@ -260,8 +260,14 @@ body { overflow: hidden; }
   background: #fff;
   color: #c2410c;
   border-color: #c2410c;
-  transform-origin: center;
-  outline: 3px solid rgb(194 65 12 / 0.35);
+  animation: story-pulse 1.6s ease-out infinite;
+}
+@keyframes story-pulse {
+  0% { box-shadow: 0 0 0 0 rgb(194 65 12 / 0.55); }
+  100% { box-shadow: 0 0 0 22px rgb(194 65 12 / 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-pin-on { animation: none; outline: 3px solid rgb(194 65 12 / 0.4); }
 }
 .story-pin-inline {
   width: 22px;

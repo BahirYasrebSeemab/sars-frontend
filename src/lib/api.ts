@@ -77,9 +77,23 @@ export interface PointRadar {
   changed_pct_300m: number | null
 }
 
+/** What the map shows for a step; unset fields leave the map as it is. */
+export interface StoryShow {
+  view?: "ground" | "change" | null
+  subtle?: boolean | null
+  basemap?: string | null
+  radar_opacity?: number | null
+  /** Divider position: 0 all after .. 1 all before. */
+  split?: number | null
+}
+
 export interface StoryPoint {
   id: string
   title: string
+  headline?: string | null
+  /** A numbered area to fly to and outline. */
+  area?: number | null
+  show?: StoryShow | null
   lat: number
   lon: number
   zoom: number
