@@ -99,6 +99,7 @@ export interface StoryPoint {
   zoom: number
   what_happened: string
   photos: StoryPhoto[]
+  videos?: { title: string; url: string }[]
   sources: { label: string; url: string }[]
   radar: PointRadar | null
 }

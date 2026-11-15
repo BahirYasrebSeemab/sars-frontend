@@ -8,6 +8,40 @@ import { cn } from "@/lib/utils"
 const navBtn =
   "flex h-10 items-center gap-1.5 rounded-lg px-4 text-[14px] font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
 
+/** The id of a YouTube watch / share link, for its thumbnail; null for any other site. */
+function youtubeId(url: string): string | null {
+  const m = url.match(/(?:youtu\.be\/|[?&]v=|\/shorts\/|\/embed\/)([\w-]{11})/)
+  return m ? m[1] : null
+}
+
+/** A video about the event: its thumbnail with a play mark, opening the video in a new tab. */
+function VideoLink({ title, url }: { title: string; url: string }) {
+  const id = youtubeId(url)
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="group relative block overflow-hidden rounded-lg border border-foreground/10 bg-neutral-900 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {id && (
+        <img
+          src={`https://img.youtube.com/vi/${id}/hqdefault.jpg`}
+          alt=""
+          className="aspect-video w-full object-cover opacity-85 transition-opacity group-hover:opacity-100"
+        />
+      )}
+      <span className={cn("flex items-center gap-2 px-3 py-2 text-[13px] font-semibold text-white", id && "absolute inset-x-0 bottom-0 bg-black/65")}>
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#c2410c]">
+          <PlayIcon className="size-3 fill-current" />
+        </span>
+        {title}
+        <span className="ml-auto text-[11px] font-normal opacity-80">opens YouTube</span>
+      </span>
+    </a>
+  )
+}
+
 type Box = [[number, number], [number, number]]
 
 /** One of the event's own map images, cropped to a box: a "map picture" of the place. */
@@ -163,6 +197,7 @@ export function StoryCard({
           ))}
           {isPlace && point.show?.radar_opacity !== 0 && <RadarPair point={point} event={event} />}
           <p className="text-[14px] leading-relaxed">{point.what_happened}</p>
+          {point.videos?.map((v) => <VideoLink key={v.url} title={v.title} url={v.url} />)}
           {isPlace && point.show?.radar_opacity !== 0 && (
             <div className="rounded-lg bg-foreground/5 px-3 py-2.5">
               <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
