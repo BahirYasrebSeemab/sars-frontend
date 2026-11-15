@@ -21,10 +21,14 @@ Page and data then share one address and one port, so others on the network can 
 - Left sidebar: a searchable event list, the measured change per class, the numbered areas
   (searchable by number or by darker / growth / double bounce), the change histogram, how to read
   the radar, and the data provenance (granules, release maturity, orbit data).
-- Map colours, two views (switch on the toolbar):
-  - **Ground** (default): both dates painted in the same four classes (water, smooth ground,
+- The side panel speaks plain language first ("What happened", "How to read the map", the
+  numbered places); the radar terms, thresholds, histogram and granule table sit in a
+  "Technical details" section that opens on click.
+- A "?" button on the toolbar opens a five-step guide; it also opens once on a first visit.
+- Map colours, two views (switch on the toolbar, "Land" / "Changes" on a phone):
+  - **Before & after** (default): both dates painted in the same four classes (water, smooth ground,
     fields & shrubs, bright), so dragging the divider shows what grew and what shrank.
-  - **Change**: only what changed, on the after date (darker, double bounce, rougher, wind on water).
+  - **Only changes**: only what changed, on the after date (darker, double bounce, rougher, wind on water).
 - Colour key above the toolbar: every colour with its km² (before -> after in the Ground view);
   a click explains what it stands for, what it can mean for this kind of event and its usual causes.
 - Rest the mouse anywhere for a plain-language reading of that spot: its colour, the ground on
