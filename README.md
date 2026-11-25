@@ -1,10 +1,23 @@
 # SAR Change Watch: NISAR change detection (map)
 
-NASA Space Apps Challenge 2026, "Dancing with the SARs". A full-screen map that shows what
-changed between two NISAR L-band radar passes: floods, burns and other surface change, with a
-before/after swipe, change classes, numbered areas of concentrated change and dated NASA photos.
-The processing pipeline, the method and the data are in
-[sars-backend](https://github.com/yusof-shkn/sars-backend).
+**See what a disaster changed on the ground, through smoke, cloud and darkness.** A full-screen map
+that compares two NISAR L-band radar passes and tells the story of a flood, fire or landslide in
+plain language: what changed, where, and how much.
+
+Built for the NASA Space Apps Challenge 2026, "Dancing with the SARs". I wrote almost all of the
+code: this map, and the processing pipeline and API in
+[sars-backend](https://github.com/BahirYasrebSeemab/sars-backend). Team repositories:
+[yusof-shkn/sars-frontend](https://github.com/yusof-shkn/sars-frontend) and
+[yusof-shkn/sars-backend](https://github.com/yusof-shkn/sars-backend).
+
+![The Thunder Bay 36 wildfire as NISAR radar sees it: burnt forest in orange, with the story card](docs/screenshots/03_story-burn-in-radar-landscape-500m.jpg)
+
+| Follow the story to the places that changed most | Point at any spot for a plain-language reading |
+|---|---|
+| ![Hardest-burnt area outlined](docs/screenshots/05_story-hardest-burn-area-outlined.jpg) | ![Hover explains a spot](docs/screenshots/09_hover-explains-a-spot.jpg) |
+
+**Stack:** React 19 · TypeScript · Vite · Tailwind CSS 4 · Leaflet · Base UI · Playwright checks.
+Backend: Python · FastAPI · NASA Earthdata (NISAR GCOV) · uv · pytest.
 
 ## Run
 Start the backend first (see its README), then:
